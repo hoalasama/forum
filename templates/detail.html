@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+{% load hitcount_tags %}
+{% block content %}
+    <div class="container">
+        <!--Navigation-->
+        <div class="navigate">
+            <span><a href="{% url 'home' %}">MyForum - Forums</a> >> <a href="{{post.categories.all.0.get_url}}">{{post.categories.all.0}}</a> >> <a href="{{post.get_url}}">{{post.title}}</a></span>
+        </div>
+
+        <!--Topic Section-->
+        <div class="topic-container">
+            <!--Original thread-->
+            <div class="head">
+                <div class="authors">Author</div>
+                <div class="content">Topic: {{post.title}} (Read {% get_hit_count for post %} Times)</div>
+                {% if user.is_authenticated and user == post.user.user %}
+                <div><a href="{% url 'delete_post' post.id %}">delete</a></div>
+                {% endif %}
+            </div>
+
+            <div class="body">
+                <div class="authors">
+                    <div class="username"><a href="{% url 'other_profile' post.user.slug %}">{{post.user.fullname|title}}</a></div>
+                    <div>Role</div>
+                    <img src="{{post.user.profile_pic.url}}" alt="">
+                    <div>Posts: <u>{{comment.user.num_posts}}</u></div>
+                    <div>Points: <u>{{comment.user.points}}</u></div>
+                </div>
+                <div>
+                    {% if user.is_authenticated %}
+                        {% with user_vote=post.get_user_vote %}
+                            <button {% if user_vote and user_vote.vote_type == 'U' %}disabled{% endif %} onclick="window.location.href='{% url 'upvote' post.id %}'">Upvote</button>
+                            <h1>{{ post.get_vote_count }}</h1>
+                            <button {% if user_vote and user_vote.vote_type == 'D' %}disabled{% endif %} onclick="window.location.href='{% url 'downvote' post.id %}'">Downvote</button>
+                        {% endwith %}
+                    {% endif %}
+                </div>
+                <div class="content">
+                    {{post.content|safe}}
+                    <div>
+                    {% for tag in post.tags.all %}
+                        <a href="{% url 'tagged_posts' tag.slug %}">#{{ tag.name }}</a>
+                    {% endfor %}
+                    </div>
+                    {% if user.is_authenticated %}
+                    <div class="comment">
+                        <button onclick="showComment()">Comment</button>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+
+
+        <!--Comment Area-->
+        
+        <form action="." method="post">
+            {% csrf_token %}
+            <div class="comment-area hide" id="comment-area">
+                <textarea name="comment" id="" placeholder="comment here ... "></textarea>
+                <input type="submit" value="submit" name="comment-form">
+                <button onclick="hideComment()">Hide</button>
+            </div>
+        </form>
+        
+        <!--Comments Section-->
+
+        {% for comment in post.comments.all %}
+        <div class="comments-container">
+            <div class="body">
+                <div class="authors">
+                    <div class="username"><a href="{% url 'other_profile' comment.user.slug %}">{{comment.user.fullname|title}}</a></div>
+                    <div>Role</div>
+                    <img src="{{comment.user.profile_pic.url}}" alt="">
+                    <div>Posts: <u>{{comment.user.num_posts}}</u></div>
+                    <div>Points: <u>{{comment.user.points}}</u></div>
+                </div>
+                <div class="content">
+                    <div class="comment-content">{{comment.content}}</div>
+                    <br>
+                    {% if user.is_authenticated %}
+                    <div class="comment">
+                        <button onclick="showReplies('comment{{comment.id}}')">Reply</button>
+                    </div>
+                    {% endif %}
+                    {% if user.is_authenticated and user == comment.user.user %}
+                        <a href="{% url 'edit_comment' comment.id post.slug %}" class="edit-comment">Edit</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <!--Reply Area-->
+        
+        <form action="." method="post">
+            {% csrf_token %}
+            <div class="comment-area hide" id="comment{{comment.id}}">
+                <textarea name="reply" id="" placeholder="reply here ... "></textarea>
+                <input type="submit" value="submit" name="reply-form">
+                <input type="hidden" name="comment-id" value="{{comment.id}}">
+                <button onclick="hideReplies('comment{{comment.id}}')">Hide</button>
+            </div>
+        </form>
+        
+        <!--reply section-->
+        {% for reply in comment.replies.all %}
+        <div class="comments-container" style="width: 95%;  margin-left:5%;">
+            <div class="body">
+                <div class="authors">
+                    <div class="username"><a href="{% url 'other_profile' reply.user.slug %}">{{reply.user.fullname|title}}</a></div>
+                    <div>Role</div>
+                    <img src="{{reply.user.profile_pic.url}}" alt="">
+                    <div>Posts: <u>{{reply.user.num_posts}}</u></div>
+                    <div>Points: <u>{{reply.user.points}}</u></div>
+                </div>
+                <div class="content">
+                    {{reply.content}}
+                    <br>
+                    {% if user.is_authenticated and user == reply.user.user %}
+                        <a href="{% url 'edit_reply' reply.id post.slug %}" class="edit-comment">Edit</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+
+        {% endfor %}
+
+
+       
+
+        
+
+    </div>
+    {% endblock content %}
