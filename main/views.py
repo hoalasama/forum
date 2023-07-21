@@ -10,24 +10,52 @@ from django.shortcuts import render
 from django.views import View
 from django.urls import reverse
 from django.contrib import messages
+from django.http import HttpResponse
+from django.http import JsonResponse
+from register.checkprofile import profile_completion_required
+from django.db.models import Q
 
+@profile_completion_required
 def home(request):
     forums = Category.objects.all()
     num_posts = Post.objects.all().count()
     num_users = User.objects.all().count()
     num_categories = forums.count()
+    
+    #posts = Post.objects.all()
+    
+    page = request.GET.get("page")
+    q = request.GET.get('q') if request.GET.get('q') != None else ''
+
+    posts = Post.objects.filter(
+        Q(categories__title__icontains=q) |
+        Q(title__icontains=q) |
+        Q(content__icontains=q)
+    )
+
+    paginator = Paginator(posts, 5)
+
     try:
         last_post = Post.objects.latest("date")
     except Post.DoesNotExist:
         last_post = None
 
+    try:
+        posts = paginator.page(page)
+    except PageNotAnInteger:
+        posts = paginator.page(1)
+    except EmptyPage:
+        posts = paginator.page(paginator.num_pages)
+        
     context = {
         "forums":forums,
         "num_posts":num_posts,
         "num_users":num_users,
         "num_categories":num_categories,
         "last_post":last_post,
-        "title": "Home Page"
+        "posts" : posts,
+        "q" : q,
+        "title": "Home Page",
     }
     return render(request, "forums.html", context)
 
@@ -35,7 +63,7 @@ def detail(request, slug):
     post = get_object_or_404(Post, slug = slug)
     post = Post.objects.get(pk=post.id)
 
-    author = None
+    author = get_object_or_404(Author, user=request.user)
     if request.user.is_authenticated:
         author = Author.objects.get(user=request.user)  
     if request.method == "POST":
@@ -54,6 +82,7 @@ def detail(request, slug):
     context = {
         "post":post,
         "title": post.title,
+        "author": author,
     }
     update_views(request, post)
 
@@ -78,10 +107,11 @@ def posts(request, slug):
 
     return render(request, "posts.html", context)
 
+@profile_completion_required
 @login_required
 def create_post(request):
     context = {}
-    form = PostForm(request.POST or None)
+    form = PostForm(request.POST or None, request.FILES or None)
     if request.method == "POST":
         if form.is_valid():
             author = Author.objects.get(user=request.user)
@@ -95,6 +125,7 @@ def create_post(request):
         "title": "Create New Post"
     })
     return render(request, "create_post.html", context)
+
 @login_required
 def delete_post(request, post_id=None):
     post_to_delete = get_object_or_404(Post, id=post_id)
@@ -110,7 +141,7 @@ def delete_post(request, post_id=None):
         'user' : request.user,
     }
     return render(request, 'delete_post.html', context)
-    #url = reverse('delete_post', args=[post_id])
+
 def my_view(request, post_id):
     post_id = get_object_or_404(Post, id=post_id)
     url = reverse('delete_post', args=[post_id])
@@ -124,6 +155,7 @@ def latest_posts(request):
 
     return render(request, "latest-posts.html", context)
 
+@profile_completion_required
 def search_result(request):
     query = request.GET.get('query', '')
     results = Post.objects.filter(title__icontains=query)
@@ -135,6 +167,25 @@ def search_result(request):
 
     return render(request, 'search.html', context)
 
+@login_required
+def edit_post(request, post_id, post_slug):
+    post = get_object_or_404(Post, id=post_id)
+    slug = post_slug
+    if request.method == 'POST':
+        post.title = request.POST.get('new_title')
+        post.content = request.POST.get('new_content')
+
+        post.tags.clear()
+        tags = request.POST.get('tags')
+        if tags:
+            tag_list = [tag.strip() for tag in tags.split(',')]
+            post.tags.add(*tag_list)
+        post.save()
+        return redirect('detail', slug)
+    
+    return render(request, 'register/editpost.html', {'post': post})
+
+@login_required
 def edit_comment(request, comment_id, post_slug):
     comment = get_object_or_404(Comment, id=comment_id)
     slug = post_slug
@@ -146,6 +197,18 @@ def edit_comment(request, comment_id, post_slug):
 
     return render(request, 'register/editcomment.html', {'comment': comment})
 
+@login_required
+def delete_comment(request, comment_id, post_slug):
+    comment = get_object_or_404(Comment, id=comment_id)
+    slug = post_slug
+    if request.method == 'POST':
+        comment.replies.all().delete()
+        comment.delete()
+        return redirect('detail', slug)
+    
+    return render(request, 'delete_comment.html', {'comment': comment})
+
+@login_required
 def edit_reply(request, reply_id, post_slug):
     comment = get_object_or_404(Reply, id=reply_id)
     slug = post_slug
@@ -157,6 +220,15 @@ def edit_reply(request, reply_id, post_slug):
 
     return render(request, 'register/editreply.html', {'reply': comment})
 
+@login_required
+def delete_reply(request, reply_id, post_slug):
+    comment = get_object_or_404(Reply, id=reply_id)
+    slug = post_slug
+    if request.method == 'POST':
+        comment.delete()
+        return redirect('detail', slug)
+    
+    return render(request, 'delete_reply.html', {'comment': comment})
 
 def tagged_posts(request, tag_slug):
     tag = tag_slug.split('/')[-1]
@@ -174,8 +246,11 @@ def upvote(request, post_id):
         vote.activity_type = Vote.UP_VOTE[0]
         vote.save()
     
-    return redirect(request.META.get('HTTP_REFERER', ''))
-
+    vote_count = post.get_vote_count()
+    #return redirect(request.META.get('HTTP_REFERER', ''))
+    return JsonResponse({'vote_count': vote_count})
+    
+    
 @login_required
 def downvote(request, post_id):
     post = get_object_or_404(Post, id=post_id)
@@ -187,5 +262,7 @@ def downvote(request, post_id):
         vote.activity_type = Vote.DOWN_VOTE[0]
         vote.save()
     
-    return redirect(request.META.get('HTTP_REFERER', ''))
+    vote_count = post.get_vote_count()
+    #return redirect(request.META.get('HTTP_REFERER', ''))
+    return JsonResponse({'vote_count': vote_count})
 

@@ -7,6 +7,7 @@ from hitcount.models import HitCountMixin, HitCount
 from django.contrib.contenttypes.fields import GenericRelation
 from taggit.managers import TaggableManager
 from django.shortcuts import reverse
+from django.utils.crypto import get_random_string
 
 
 User = get_user_model()
@@ -14,10 +15,10 @@ User = get_user_model()
 class Author(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     fullname = models.CharField(max_length=40, blank=True)
-    slug = slug = models.SlugField(max_length=400, unique=True, blank=True)
+    slug = models.SlugField(max_length=400, unique=True, blank=True)
     bio = HTMLField()
     points = models.IntegerField(default=0)
-    profile_pic = ResizedImageField(size=[50, 80], quality=100, upload_to="authors", default="media/defaults/default_profile_pic.jpg", null=True, blank=False)
+    profile_pic = ResizedImageField(size=[400, 400], quality=100, upload_to="authors", default="defaults/default_profile_pic.jpg", null=True, blank=False)
 
     def __str__(self):
         return self.fullname
@@ -83,6 +84,8 @@ class Post(models.Model):
     categories = models.ManyToManyField(Category)
     date = models.DateTimeField(auto_now_add=True)
     approved = models.BooleanField(default=True)
+    image = models.ImageField(upload_to='post_images', blank=True, null=True)
+
     hit_count_generic = GenericRelation(HitCount, object_id_field='object_pk',
         related_query_name='hit_count_generic_relation'
     )
@@ -92,7 +95,9 @@ class Post(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.slug:
-            self.slug = slugify(self.title)
+            base_slug = slugify(self.title)
+            random_string = get_random_string(length=4)
+            self.slug = f"{base_slug}-{random_string}"
         super(Post, self).save(*args, **kwargs)
 
     def __str__(self):
@@ -108,6 +113,9 @@ class Post(models.Model):
             "slug":self.slug
         })
     
+    class Meta:
+        ordering = ['-date']
+
     @property
     def num_comments(self):
         return self.comments.count()
