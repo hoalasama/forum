@@ -94,7 +94,7 @@
         
         <div class="forum-info">
             <div class="chart">
-                Forum - Stats &nbsp;<i class="fa fa-bar-chart"></i>
+                Forum - Stats &nbsp;
             </div>
             <span><u>{{num_posts}}</u> Posts in <u>{{num_categories}}</u> Topics by <u>{{num_users}}</u> Members.</span><br>
             <span>Latest post: 
@@ -113,9 +113,9 @@
             {% endif %}
             <span>Check <a href="{% url 'latest_posts' %}">the latest posts</a> .</span><br>
         </div>        
-
     </div>
     
+
     <script>
         function upvotePost(postId) {
             var scrollTop = $(window).scrollTop();
@@ -146,6 +146,9 @@
                 }
             });
         }
+        
+        
+
     </script>
 
     {% endblock content %}
